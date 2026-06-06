@@ -241,17 +241,12 @@ final class TerminalInputTextView: UITextView {
     /// configuration-driven rebuild can re-apply it without toggling the flag.
     private func applyModifierPresentation() {
         guard let stack = accessoryStackView else { return }
-        for case let button as UIButton in stack.arrangedSubviews {
-            guard let action = TerminalInputAccessoryAction(rawValue: button.tag) else { continue }
-            button.setTitle(action.title(isMacRemote: isMacRemote), for: .normal)
-        }
-        // Insert/remove the command button based on whether this is a Mac terminal.
-        // We manage it outside the normal loop because it's not always in arrangedSubviews.
+        // Insert/remove the command button first (it is not always in
+        // arrangedSubviews) so the restyle pass below covers it when present.
         if let cmdButton = commandAccessoryButton {
             if isMacRemote {
                 if cmdButton.superview == nil {
-                    // Insert after alternate (index 2 in original enum order: ctrl, alt, cmd)
-                    // Find the alt button's index in the current arrangedSubviews
+                    // Insert after alternate (ctrl, alt, cmd order).
                     var insertIndex = stack.arrangedSubviews.count
                     for (idx, view) in stack.arrangedSubviews.enumerated() {
                         if view.tag == TerminalInputAccessoryAction.alternate.rawValue {
@@ -261,12 +256,21 @@ final class TerminalInputTextView: UITextView {
                     }
                     stack.insertArrangedSubview(cmdButton, at: insertIndex)
                 }
-            } else {
-                if cmdButton.superview != nil {
-                    stack.removeArrangedSubview(cmdButton)
-                    cmdButton.removeFromSuperview()
-                }
+            } else if cmdButton.superview != nil {
+                stack.removeArrangedSubview(cmdButton)
+                cmdButton.removeFromSuperview()
             }
+        }
+        // Restyle every visible button for the current remote (titles depend on
+        // `isMacRemote`) and armed/sticky state.
+        for case let button as UIButton in stack.arrangedSubviews {
+            guard let action = TerminalInputAccessoryAction(rawValue: button.tag) else { continue }
+            applyAccessoryButtonStyle(
+                button,
+                action: action,
+                armed: isAccessoryActionArmed(action),
+                sticky: isAccessoryActionSticky(action)
+            )
         }
         // Disarm command state if switching away from Mac remote (clears a
         // sticky lock too, matching the legacy unconditional setter).
@@ -429,27 +433,69 @@ final class TerminalInputTextView: UITextView {
         button.addTarget(self, action: #selector(handleAccessoryButton(_:)), for: .touchUpInside)
         button.accessibilityIdentifier = action.accessibilityIdentifier
         button.accessibilityLabel = action.accessibilityLabel
-        button.titleLabel?.font = Self.accessoryButtonFont
-
-        if let symbolName = action.symbolName {
-            button.setImage(UIImage(systemName: symbolName), for: .normal)
-            button.setPreferredSymbolConfiguration(Self.accessoryButtonSymbolConfig, forImageIn: .normal)
+        applyAccessoryButtonStyle(button, action: action, armed: false, sticky: false)
+        button.heightAnchor.constraint(equalToConstant: Self.accessoryButtonHeight).isActive = true
+        if action.isModifier || action.symbolName != nil {
+            // Single-glyph modifiers (⌃⌥⌘⇧) and icon buttons (zoom) get a fixed
+            // width so they stay uniform — their glyph metrics differ, and a
+            // greater-than-or-equal min-width let some (e.g. the glass capsule)
+            // grow wider than others. Variable-text buttons keep growing.
+            button.widthAnchor.constraint(equalToConstant: Self.accessoryButtonMinWidth).isActive = true
         } else {
-            button.setTitle(action.title, for: .normal)
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.accessoryButtonMinWidth).isActive = true
         }
-
-        applyAccessoryButtonBaseStyle(button)
         return button
     }
 
-    private func applyAccessoryButtonBaseStyle(_ button: UIButton) {
-        button.contentEdgeInsets = Self.accessoryButtonInsets
-        button.backgroundColor = Self.accessoryButtonNormalBackground
-        button.setTitleColor(.white, for: .normal)
-        button.tintColor = .white
-        button.layer.cornerRadius = Self.accessoryButtonCornerRadius
-        button.heightAnchor.constraint(equalToConstant: Self.accessoryButtonHeight).isActive = true
-        button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.accessoryButtonMinWidth).isActive = true
+    /// Build (or rebuild) a button's configuration for `action` and its current
+    /// armed/sticky state. On iOS 26 the bar uses real Liquid Glass
+    /// (`.glass()` resting, `.prominentGlass()` armed/sticky); earlier OSes keep
+    /// the flat gray/blue fill the bar shipped with.
+    private func applyAccessoryButtonStyle(
+        _ button: UIButton,
+        action: TerminalInputAccessoryAction,
+        armed: Bool,
+        sticky: Bool
+    ) {
+        var config = Self.accessoryButtonConfiguration(armed: armed, sticky: sticky)
+        if let symbolName = action.symbolName {
+            config.image = UIImage(systemName: symbolName)
+            config.preferredSymbolConfigurationForImage = Self.accessoryButtonSymbolConfig
+            config.attributedTitle = nil
+        } else {
+            var title = AttributedString(action.title(isMacRemote: isMacRemote))
+            title.font = Self.accessoryButtonFont
+            config.attributedTitle = title
+            config.image = nil
+        }
+        config.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
+        button.configuration = config
+    }
+
+    private static func accessoryButtonConfiguration(armed: Bool, sticky: Bool) -> UIButton.Configuration {
+        if #available(iOS 26.0, *) {
+            var config: UIButton.Configuration = (armed || sticky) ? .prominentGlass() : .glass()
+            config.baseForegroundColor = .white
+            if armed || sticky {
+                config.baseBackgroundColor = .systemBlue
+            }
+            return config
+        }
+        var config = UIButton.Configuration.plain()
+        var background = UIBackgroundConfiguration.clear()
+        if sticky {
+            background.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.85)
+            background.strokeColor = .white
+            background.strokeWidth = 2
+        } else if armed {
+            background.backgroundColor = .systemBlue
+        } else {
+            background.backgroundColor = accessoryButtonNormalBackground
+        }
+        background.cornerRadius = accessoryButtonCornerRadius
+        config.background = background
+        config.baseForegroundColor = .white
+        return config
     }
 
     private func handleAccessoryAction(_ action: TerminalInputAccessoryAction) {
@@ -537,25 +583,12 @@ final class TerminalInputTextView: UITextView {
         guard let stack = accessoryStackView else { return }
         for case let button as UIButton in stack.arrangedSubviews {
             guard let action = TerminalInputAccessoryAction(rawValue: button.tag) else { continue }
-            let armed = isAccessoryActionArmed(action)
-            let sticky = isAccessoryActionSticky(action)
-            if sticky {
-                button.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.85)
-                button.setTitleColor(.white, for: .normal)
-                button.tintColor = .white
-                button.layer.borderWidth = 2
-                button.layer.borderColor = UIColor.white.cgColor
-            } else if armed {
-                button.backgroundColor = .systemBlue
-                button.setTitleColor(.white, for: .normal)
-                button.tintColor = .white
-                button.layer.borderWidth = 0
-            } else {
-                button.backgroundColor = Self.accessoryButtonNormalBackground
-                button.setTitleColor(.white, for: .normal)
-                button.tintColor = .white
-                button.layer.borderWidth = 0
-            }
+            applyAccessoryButtonStyle(
+                button,
+                action: action,
+                armed: isAccessoryActionArmed(action),
+                sticky: isAccessoryActionSticky(action)
+            )
         }
     }
 
