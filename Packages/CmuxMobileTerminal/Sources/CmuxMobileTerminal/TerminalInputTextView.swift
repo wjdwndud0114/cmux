@@ -438,7 +438,15 @@ final class TerminalInputTextView: UITextView {
         button.accessibilityLabel = action.accessibilityLabel
         applyAccessoryButtonStyle(button, action: action, armed: false, sticky: false)
         button.heightAnchor.constraint(equalToConstant: Self.accessoryButtonHeight).isActive = true
-        button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.accessoryButtonMinWidth).isActive = true
+        if action.symbolName != nil {
+            // Icon buttons (composer, zoom) get a fixed width so the glass capsule
+            // doesn't sprawl wider than the text buttons; the symbol centers in it.
+            button.widthAnchor.constraint(equalToConstant: Self.accessoryButtonMinWidth).isActive = true
+        } else {
+            // Text buttons size to content (so Claude/Codex can grow) but never
+            // narrower than the shared minimum.
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.accessoryButtonMinWidth).isActive = true
+        }
         return button
     }
 
