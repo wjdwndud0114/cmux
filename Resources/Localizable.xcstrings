@@ -175426,6 +175426,40 @@
         }
       }
     },
+    "mobile.pairing.connected.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone connected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhoneが接続されました"
+          }
+        }
+      }
+    },
+    "mobile.pairing.connected.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your terminal workspaces are now syncing to your iPhone. You can close this window."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルのワークスペースがiPhoneと同期されました。このウィンドウは閉じても大丈夫です。"
+          }
+        }
+      }
+    },
     "mobile.pairing.req.signIn.title": {
       "extractionState": "manual",
       "localizations": {
