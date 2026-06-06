@@ -13,6 +13,10 @@ struct WorkspaceListView: View {
     let host: String
     let connectionStatus: MobileMacConnectionStatus
     let navigationStyle: WorkspaceNavigationStyle
+    /// Whether workspace-row titles wrap (multi-line) instead of truncating to a
+    /// single line. Passed in as a value snapshot so no `@Observable` store
+    /// crosses the `List` boundary.
+    let wrapWorkspaceTitles: Bool
     let selectWorkspace: (MobileWorkspacePreview.ID) -> Void
     let createWorkspace: () -> Void
     /// Optional: when present, the toolbar shows a "settings" menu offering
@@ -49,10 +53,10 @@ struct WorkspaceListView: View {
                 ForEach(filteredWorkspaces) { workspace in
                     WorkspaceNavigationRow(
                         workspace: workspace,
-                        host: host,
                         connectionStatus: connectionStatus,
                         isSelected: navigationStyle == .sidebar && selectedWorkspaceID == workspace.id,
                         navigationStyle: navigationStyle,
+                        wrapWorkspaceTitles: wrapWorkspaceTitles,
                         selectWorkspace: selectWorkspace
                     )
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
